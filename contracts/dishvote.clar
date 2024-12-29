@@ -1,63 +1,69 @@
-;; DishVote - A decentralized voting application
-;; Allows users to vote for their favorite dish from a predefined list
+;; DishVote - An enhanced decentralized voting application
 
 ;; Constants
-(define-constant ERR-INVALID-DISH u100)
-(define-constant ERR-ALREADY-VOTED u101)
-(define-constant MAX-DISHES u3)
+(define-constant ERR-INVALID-DISH (err u100))
+(define-constant ERR-ALREADY-VOTED (err u101))
+(define-constant ERR-VOTING-CLOSED (err u102))
+(define-constant ERR-UNAUTHORIZED (err u103))
+(define-constant ERR-MAX-DISHES-REACHED (err u104))
 
 ;; Data variables
-(define-data-var votes-dish1 uint u0)
-(define-data-var votes-dish2 uint u0)
-(define-data-var votes-dish3 uint u0)
+(define-data-var dish-count uint u3)
 (define-data-var total-votes uint u0)
+(define-data-var voting-open bool true)
 
-;; Dish names
-(define-constant dish1 "Jollof Rice")
-(define-constant dish2 "Egusi Soup")
-(define-constant dish3 "Pounded Yam")
+;; Principal of the contract deployer
+(define-data-var contract-owner principal tx-sender)
+
+;; Map to store dish information
+(define-map dishes uint {name: (string-ascii 50), votes: uint})
 
 ;; Map to track if a user has voted
 (define-map user-voted principal bool)
 
+;; Initialize dishes
+(map-set dishes u1 {name: "Jollof Rice", votes: u0})
+(map-set dishes u2 {name: "Egusi Soup", votes: u0})
+(map-set dishes u3 {name: "Pounded Yam", votes: u0})
+
 ;; Vote function
 (define-public (vote (dish uint))
-    (let ((caller tx-sender))
-        (asserts! (not (default-to false (map-get? user-voted caller))) (err ERR-ALREADY-VOTED))
-        (asserts! (<= dish MAX-DISHES) (err ERR-INVALID-DISH))
+    (let 
+        (
+            (caller tx-sender)
+            (dish-data (unwrap! (map-get? dishes dish) ERR-INVALID-DISH))
+        )
+        (asserts! (var-get voting-open) ERR-VOTING-CLOSED)
+        (asserts! (not (default-to false (map-get? user-voted caller))) ERR-ALREADY-VOTED)
+        (asserts! (<= dish (var-get dish-count)) ERR-INVALID-DISH)
         (map-set user-voted caller true)
         (var-set total-votes (+ (var-get total-votes) u1))
-        (if (is-eq dish u1)
-            (ok (var-set votes-dish1 (+ (var-get votes-dish1) u1)))
-            (if (is-eq dish u2)
-                (ok (var-set votes-dish2 (+ (var-get votes-dish2) u1)))
-                (ok (var-set votes-dish3 (+ (var-get votes-dish3) u1)))
-            )
-        )
+        (ok (map-set dishes dish 
+            {name: (get name dish-data), votes: (+ (get votes dish-data) u1)}))
     )
 )
 
 ;; Get all votes
 (define-read-only (get-votes)
-    {
-        dish1: (var-get votes-dish1),
-        dish2: (var-get votes-dish2),
-        dish3: (var-get votes-dish3),
-        total: (var-get total-votes)
-    }
+    (let 
+        ((votes (map get-dish-data (list u1 u2 u3))))
+        {
+            dishes: votes,
+            total: (var-get total-votes)
+        }
+    )
+)
+
+;; Helper function to get dish data
+(define-private (get-dish-data (id uint))
+    (default-to {name: "Unknown", votes: u0} (map-get? dishes id))
 )
 
 ;; Get votes for a specific dish
 (define-read-only (get-dish-votes (dish uint))
-    (if (is-eq dish u1)
-        (ok (var-get votes-dish1))
-        (if (is-eq dish u2)
-            (ok (var-get votes-dish2))
-            (if (is-eq dish u3)
-                (ok (var-get votes-dish3))
-                (err ERR-INVALID-DISH)
-            )
-        )
+    (match (map-get? dishes dish)
+        dish-data (ok (get votes dish-data))
+        ERR-INVALID-DISH
     )
 )
 
@@ -68,17 +74,44 @@
 
 ;; Get the winning dish
 (define-read-only (get-winning-dish)
-    (let (
-        (votes1 (var-get votes-dish1))
-        (votes2 (var-get votes-dish2))
-        (votes3 (var-get votes-dish3))
-    )
-    (if (and (>= votes1 votes2) (>= votes1 votes3))
-        (ok dish1)
-        (if (>= votes2 votes3)
-            (ok dish2)
-            (ok dish3)
-        )
-    ))
+    (fold check-winner (list u1 u2 u3) {id: u0, votes: u0, name: ""})
 )
 
+;; Helper function for finding the winner
+(define-private (check-winner (id uint) (current-winner {id: uint, votes: uint, name: (string-ascii 50)}))
+    (let ((dish-data (get-dish-data id)))
+        (if (> (get votes dish-data) (get votes current-winner))
+            {id: id, votes: (get votes dish-data), name: (get name dish-data)}
+            current-winner
+        )
+    )
+)
+
+;; Admin function to pause voting
+(define-public (pause-voting)
+    (begin
+        (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-UNAUTHORIZED)
+        (ok (var-set voting-open false))
+    )
+)
+
+;; Admin function to resume voting
+(define-public (resume-voting)
+    (begin
+        (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-UNAUTHORIZED)
+        (ok (var-set voting-open true))
+    )
+)
+
+;; Admin function to add a new dish
+(define-public (add-dish (name (string-ascii 50)))
+    (begin
+        (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-UNAUTHORIZED)
+        (let ((new-id (+ (var-get dish-count) u1)))
+            (asserts! (< new-id u255) ERR-MAX-DISHES-REACHED)
+            (map-set dishes new-id {name: name, votes: u0})
+            (var-set dish-count new-id)
+            (ok new-id)
+        )
+    )
+)
