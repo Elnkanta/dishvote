@@ -107,6 +107,7 @@
 (define-public (add-dish (name (string-ascii 50)))
     (begin
         (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-UNAUTHORIZED)
+        (asserts! (> (len name) u0) ERR-INVALID-DISH)
         (let ((new-id (+ (var-get dish-count) u1)))
             (asserts! (< new-id u255) ERR-MAX-DISHES-REACHED)
             (map-set dishes new-id {name: name, votes: u0})
