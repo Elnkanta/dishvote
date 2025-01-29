@@ -22,6 +22,7 @@
         (asserts! (not (is-some (map-get? votes {voter: tx-sender}))) (err u102))
         (asserts! (>= burn-block-height (var-get voting-start)) (err u103))
         (asserts! (<= burn-block-height (var-get voting-end)) (err u104))
+        (asserts! (<= (len dish-name) MAX_DISH_NAME_LEN) (err u105))
         
         (let ((current-count (default-to u0 (get count (map-get? vote-counts {dish: dish-name})))))
             (map-set votes {voter: tx-sender} {dish: dish-name})
