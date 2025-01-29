@@ -20,8 +20,8 @@
 (define-public (vote (dish-name (string-ascii 30)))
     (begin
         (asserts! (not (is-some (map-get? votes {voter: tx-sender}))) (err u102))
-        (asserts! (>= (as-contract (contract-call? .core get-block-height)) (var-get voting-start)) (err u103))
-        (asserts! (<= (as-contract (contract-call? .core get-block-height)) (var-get voting-end)) (err u104))
+        (asserts! (>= burn-block-height (var-get voting-start)) (err u103))
+        (asserts! (<= burn-block-height (var-get voting-end)) (err u104))
         
         (let ((current-count (default-to u0 (get count (map-get? vote-counts {dish: dish-name})))))
             (map-set votes {voter: tx-sender} {dish: dish-name})
