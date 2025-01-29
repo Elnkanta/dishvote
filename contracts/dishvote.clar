@@ -1,5 +1,5 @@
-(define-map votes { voter: principal } { dish: (string-ascii 30) })
-(define-map vote-counts { dish: (string-ascii 30) } { count: uint })
+(define-map votes {voter: principal} {dish: (string-ascii 30)})
+(define-map vote-counts {dish: (string-ascii 30)} {count: uint})
 
 (define-data-var admin principal tx-sender)
 (define-data-var voting-start uint u0)
@@ -19,26 +19,27 @@
 
 (define-public (vote (dish-name (string-ascii 30)))
     (begin
-        (asserts! (not (is-some (map-get? votes { voter: tx-sender }))) (err u102))
-        (asserts! (>= block-height (var-get voting-start)) (err u103))
-        (asserts! (<= block-height (var-get voting-end)) (err u104))
+        (asserts! (not (is-some (map-get? votes {voter: tx-sender}))) (err u102))
+        (asserts! (>= (as-contract (contract-call? .core get-block-height)) (var-get voting-start)) (err u103))
+        (asserts! (<= (as-contract (contract-call? .core get-block-height)) (var-get voting-end)) (err u104))
         
-        (let ((current-count (default-to u0 (get count (map-get? vote-counts { dish: dish-name })))))
-            (map-set votes { voter: tx-sender } { dish: dish-name })
-            (map-set vote-counts { dish: dish-name } { count: (+ current-count u1) })
+        (let ((current-count (default-to u0 (get count (map-get? vote-counts {dish: dish-name})))))
+            (map-set votes {voter: tx-sender} {dish: dish-name})
+            (map-set vote-counts {dish: dish-name} {count: (+ current-count u1)})
             (ok true)
         )
     )
 )
 
 (define-read-only (get-vote (voter principal))
-    (map-get? votes { voter: voter })
+    (map-get? votes {voter: voter})
 )
 
 (define-read-only (get-vote-count (dish-name (string-ascii 30)))
-    (map-get? vote-counts { dish: dish-name })
+    (map-get? vote-counts {dish: dish-name})
 )
 
 (define-read-only (get-vote-counts)
-    (ok (map-get? vote-counts { dish: "example" }))
+    (ok (map-get? vote-counts {dish: "example"}))
 )
+
